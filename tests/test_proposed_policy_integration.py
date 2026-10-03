@@ -2,6 +2,7 @@ import numpy as np
 
 from src.access_score import AccessScoreTracker
 from src.buffer_pool import BufferPool
+from src.graph_locality import PageGraph
 from src.lsh import LSHManager
 from src.page import Page
 from src.proposed_policy import GraphLSHAwareEvictionPolicy
@@ -18,7 +19,21 @@ def create_storage():
     return storage
 
 
-def test_proposed_policy_selects_victim():
+def create_page_graph():
+    page_graph = PageGraph()
+
+    # Pages 0 and 1 have a strong graph relationship.
+    page_graph.weights[0][1] = 5
+    page_graph.weights[1][0] = 5
+
+    # Pages 1 and 2 have a weaker graph relationship.
+    page_graph.weights[1][2] = 2
+    page_graph.weights[2][1] = 2
+
+    return page_graph
+
+
+def test_proposed_policy_uses_graph_lsh_and_access():
     storage = create_storage()
 
     page_vectors = {
@@ -43,9 +58,11 @@ def test_proposed_policy_selects_victim():
         gamma=0.2
     )
 
+    page_graph = create_page_graph()
+
     policy = GraphLSHAwareEvictionPolicy(
         usefulness_calculator=calculator,
-        page_graph=None,
+        page_graph=page_graph,
         lsh_manager=lsh_manager,
         access_tracker=access_tracker
     )
@@ -62,8 +79,21 @@ def test_proposed_policy_selects_victim():
 
     assert len(buffer_pool.current_pages()) == 3
 
+    # Requesting page 3 fills the buffer and forces the proposed
+    # policy to calculate usefulness and select a victim.
     buffer_pool.request_page(3)
 
     assert len(buffer_pool.current_pages()) == 3
     assert buffer_pool.page_faults == 4
     assert buffer_pool.evictions == 1
+
+    # Page 3 must now be present because it was just requested.
+    assert buffer_pool.contains(3)
+
+    # Exactly one of the original pages was evicted.
+    original_pages = {0, 1, 2}
+    remaining_original_pages = original_pages.intersection(
+        set(buffer_pool.current_pages())
+    )
+
+    assert len(remaining_original_pages) == 2
