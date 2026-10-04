@@ -1,3 +1,5 @@
+import numpy as np
+
 from src.data_loader import make_synthetic_cora
 from src.page_builder import PageTable
 from src.page_vectors import build_page_vectors
@@ -41,11 +43,11 @@ def test_lsh_integrates_with_usefulness_calculator():
 
     score = calculator.calculate_usefulness(
         page_id=0,
-        current_pages_in_buffer=[0, 1, 2],
+        reference_page=1,
         page_graph=None,
         lsh_manager=lsh_manager,
         access_tracker=access_tracker
     )
 
     assert isinstance(score, float)
-    assert score >= 0.0
+    assert 0.0 <= score <= 1.0

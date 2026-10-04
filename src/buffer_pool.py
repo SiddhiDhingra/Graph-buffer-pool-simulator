@@ -59,7 +59,7 @@ class BufferPool:
 
         # Buffer is full, so select a victim
         if len(self.pages) >= self.capacity:
-            victim = self._select_victim()
+            victim = self._select_victim(page_id)
 
             if victim is not None:
                 self._evict_page(victim)
@@ -73,18 +73,25 @@ class BufferPool:
 
         return page
 
-    def _select_victim(self) -> Optional[int]:
-        """Ask the replacement policy to select a page for eviction."""
-
+    def _select_victim(self, requested_page: int) -> Optional[int]:
         if not self.pages:
             return None
 
         if self.replacement_policy is None:
-            # Temporary fallback:
-            # remove the first page if no policy is supplied.
             return next(iter(self.pages))
 
-        return self.replacement_policy.select_victim(list(self.pages.keys()))
+        if hasattr(self.replacement_policy, "select_victim"):
+            try:
+                return self.replacement_policy.select_victim(
+                    list(self.pages.keys()),
+                    requested_page
+                )
+            except TypeError:
+                return self.replacement_policy.select_victim(
+                    list(self.pages.keys())
+                )
+
+        return next(iter(self.pages))
 
     def _evict_page(self, page_id: int) -> None:
         """Remove a page from the buffer."""

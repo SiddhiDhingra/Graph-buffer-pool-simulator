@@ -1,116 +1,219 @@
 from __future__ import annotations
-from src.data_loader import make_synthetic_cora
-from src.page_builder import build_pages
-from src.graph_locality import build_page_graph
-from src.workload_generator import WORKLOADS, to_page_requests
 
+from src.data_loader import load_cora
+from src.page_builder import build_pages
+from src.page_vectors import build_page_vectors
+from src.graph_locality import build_page_graph
+from src.workload_generator import (
+    random_workload,
+    graph_traversal_workload,
+    local_graph_workload,
+    mixed_workload,
+    to_page_requests,
+)
+
+from src.buffer_pool import BufferPool
+from src.replacement_policies import FIFOPolicy, LRUPolicy
+from src.lsh import LSHManager
 from src.access_score import AccessScoreTracker
 from src.usefulness_score import UsefulnessCalculator
 from src.proposed_policy import GraphLSHAwareEvictionPolicy
+
 from evaluation.metrics import EvaluationMetrics
 
 
-class SimulationEngine:
-    def __init__(self, capacity: int, policy_type: str = "lru", policy_engine = None):
-        self.capacity = capacity
-        self.policy_type = policy_type
-        self.policy_engine = policy_engine
-        self.buffer: list[int] = []
-        self.fifo_queue: list[int] = []
-        self.lru_stack: list[int] = []
+def create_proposed_policy(graph, page_table):
+    """Create the proposed Graph + LSH + Access eviction policy."""
 
-    def request_page(self, page_id: int) -> bool:
-        if self.policy_engine and hasattr(self.policy_engine, 'access_tracker'):
-            self.policy_engine.access_tracker.record_access(page_id)
+    page_graph = build_page_graph(graph, page_table)
 
-        if page_id in self.buffer:
-            if self.policy_type == "lru":
-                self.lru_stack.remove(page_id)
-                self.lru_stack.append(page_id)
-            return True  # HIT
+    page_vectors = build_page_vectors(graph, page_table)
 
-        if len(self.buffer) < self.capacity:
-            self.buffer.append(page_id)
-            if self.policy_type == "fifo":
-                self.fifo_queue.append(page_id)
-            elif self.policy_type == "lru":
-                self.lru_stack.append(page_id)
-        else:
-            victim = self._select_victim()
-            self._evict(victim)
-            self.buffer.append(page_id)
-            if self.policy_type == "fifo":
-                self.fifo_queue.append(page_id)
-            elif self.policy_type == "lru":
-                self.lru_stack.append(page_id)
+    lsh_manager = LSHManager(
+        page_vectors,
+        num_tables=5,
+        num_planes=8,
+        seed=42
+    )
 
-        return False  # PAGE FAULT
+    access_tracker = AccessScoreTracker()
 
-    def is_full(self) -> bool:
-        return len(self.buffer) >= self.capacity
+    usefulness_calculator = UsefulnessCalculator(
+        alpha=0.2,
+        beta=0.2,
+        gamma=0.6
+    )
 
-    def _select_victim(self) -> int:
-        if self.policy_type == "fifo":
-            return self.fifo_queue.pop(0)
-        elif self.policy_type == "lru":
-            return self.lru_stack.pop(0)
-        elif self.policy_type == "proposed":
-            return self.policy_engine.select_victim(self.buffer)
-        return self.buffer[0]
+    policy = GraphLSHAwareEvictionPolicy(
+        usefulness_calculator=usefulness_calculator,
+        page_graph=page_graph,
+        lsh_manager=lsh_manager,
+        access_tracker=access_tracker
+    )
 
-    def _evict(self, victim_page: int):
-        if victim_page in self.buffer:
-            self.buffer.remove(victim_page)
+    return policy
 
 
-def run_comparison_experiment() -> dict:
-    print("🚀 Initializing Synthetic Cora Dataset for Evaluation...")
-    g = make_synthetic_cora(num_nodes=300, num_edges=500, num_features=4, seed=42)
-    t = build_pages(g, page_size=50)
-    pg = build_page_graph(g, t)
+def run_policy(page_requests, storage_pages, capacity, policy):
+    """Run one policy on the same page-request workload."""
 
-    
-    nodes = WORKLOADS["traversal"](g, length=1000, restart_prob=0.1, seed=42)
-    page_requests = to_page_requests(nodes, t)
+    buffer_pool = BufferPool(
+        capacity=capacity,
+        storage_pages=storage_pages,
+        replacement_policy=policy
+    )
 
-    buffer_capacity = 5
-    policies = ["fifo", "lru", "proposed"]
+    for page_id in page_requests:
+        buffer_pool.request_page(page_id)
+
+    metrics = EvaluationMetrics()
+
+    metrics.hits = buffer_pool.hits
+    metrics.misses = buffer_pool.misses
+    metrics.page_faults = buffer_pool.page_faults
+    metrics.storage_reads = buffer_pool.storage_reads
+    metrics.evictions = buffer_pool.evictions
+
+    return metrics.summary()
+
+
+def generate_workloads(graph, page_table):
+    """Generate the workloads used for comparison."""
+
+    workloads = {}
+
+    random_nodes = random_workload(
+        graph,
+        length=1000,
+        seed=42
+    )
+
+    traversal_nodes = graph_traversal_workload(
+        graph,
+        length=1000,
+        restart_prob=0.1,
+        seed=42
+    )
+
+    local_nodes = local_graph_workload(
+        graph,
+        length=1000,
+        radius=2,
+        seed=42
+    )
+
+    mixed_nodes = mixed_workload(
+        graph,
+        length=1000,
+        seed=42
+    )
+
+    workloads["Random"] = to_page_requests(
+        random_nodes,
+        page_table
+    )
+
+    workloads["Graph Traversal"] = to_page_requests(
+        traversal_nodes,
+        page_table
+    )
+
+    workloads["Local Graph"] = to_page_requests(
+        local_nodes,
+        page_table
+    )
+
+    workloads["Mixed"] = to_page_requests(
+        mixed_nodes,
+        page_table
+    )
+
+    return workloads
+
+def run_comparison_experiment():
+    print("Loading Cora dataset...")
+
+    graph = load_cora()
+
+    print(f"Nodes: {graph.num_nodes}")
+    print(f"Edges: {len(graph.edges)}")
+
+    page_table = build_pages(
+        graph,
+        page_size=50
+    )
+
+    print(f"Logical pages: {page_table.num_pages}")
+
+    workloads = generate_workloads(
+        graph,
+        page_table
+    )
+
+    capacities = [3, 5, 10]
+
+    policies = [
+        "FIFO",
+        "LRU",
+        "Proposed"
+    ]
+
     results = {}
-    
 
-    print(f"\n📊 Running comparative simulations (Capacity={buffer_capacity}, Workload Size={len(page_requests)})...\n")
+    storage_pages = page_table.pages
 
-    for pol in policies:
-        access_tracker = AccessScoreTracker()
-        usefulness_calc = UsefulnessCalculator(alpha=0.6, beta=0.0, gamma=0.4)
-        
-        proposed_engine = GraphLSHAwareEvictionPolicy(
-            usefulness_calculator=usefulness_calc,
-            page_graph=pg,
-            lsh_manager=None,
-            access_tracker=access_tracker
-        )
+    for workload_name, page_requests in workloads.items():
 
-        pool = SimulationEngine(
-            capacity=buffer_capacity, 
-            policy_type=pol, 
-            policy_engine=proposed_engine
-        )
-        metrics = EvaluationMetrics()
+        print()
+        print("=" * 60)
+        print(f"WORKLOAD: {workload_name}")
+        print(f"Requests: {len(page_requests)}")
+        print("=" * 60)
 
-        for page_id in page_requests:
-            is_hit = pool.request_page(page_id)
-            if is_hit:
-                metrics.log_hit()
-            else:
-                metrics.log_fault()
-                if pool.is_full():
-                    metrics.log_eviction()
+        results[workload_name] = {}
 
-        results[pol] = metrics.summary()
-        print(f"Policy: {pol.upper()} -> Hit Ratio: {results[pol]['Hit Ratio']}% | Page Faults: {results[pol]['Page Faults']} | Latency: {results[pol]['Simulated Latency']}")
+        for capacity in capacities:
+
+            print()
+            print(f"Buffer Capacity: {capacity}")
+            print("-" * 60)
+
+            results[workload_name][capacity] = {}
+
+            for policy_name in policies:
+
+                if policy_name == "FIFO":
+                    policy = FIFOPolicy()
+
+                elif policy_name == "LRU":
+                    policy = LRUPolicy()
+
+                else:
+                    policy = create_proposed_policy(
+                        graph,
+                        page_table
+                    )
+
+                summary = run_policy(
+                    page_requests,
+                    storage_pages,
+                    capacity,
+                    policy
+                )
+
+                results[workload_name][capacity][policy_name] = summary
+
+                print(
+                    f"{policy_name:10} | "
+                    f"Hit Ratio: {summary['Hit Ratio']:6.2f}% | "
+                    f"Faults: {summary['Page Faults']:4} | "
+                    f"I/O: {summary['Storage I/O']:4} | "
+                    f"Evictions: {summary['Evictions']:4} | "
+                    f"Latency: {summary['Simulated Latency']}"
+                )
 
     return results
+
 
 if __name__ == "__main__":
     run_comparison_experiment()
