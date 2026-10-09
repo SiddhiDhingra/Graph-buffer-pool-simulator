@@ -57,7 +57,7 @@ def _finalize(features, labels, label_names, raw_edges, raw_ids) -> CoraGraph:
                      _build_adjacency(n, edges), raw_ids)
 
 
-def load_cora(data_dir: str = "data/cora") -> CoraGraph:
+def load_cora(data_dir: str = "data/cora", strict: bool = False) -> CoraGraph:
     """Load Cora from cora.content / cora.cites in `data_dir`."""
     content = os.path.join(data_dir, "cora.content")
     cites = os.path.join(data_dir, "cora.cites")
@@ -92,8 +92,31 @@ def load_cora(data_dir: str = "data/cora") -> CoraGraph:
             if a in id_to_idx and b in id_to_idx:   # skip dangling citations
                 raw_edges.append((id_to_idx[a], id_to_idx[b]))
 
-    return _finalize(np.array(feats, dtype=np.float32), labels,
-                     label_names, raw_edges, raw_ids)
+    result = _finalize(np.array(feats, dtype=np.float32), labels,
+                       label_names, raw_edges, raw_ids)
+    if strict:
+        expected = {
+            "nodes": 2708,
+            "features": 1433,
+            "classes": 7,
+            "citation_rows": 5429,
+        }
+        actual = {
+            "nodes": result.num_nodes,
+            "features": int(result.features.shape[1]),
+            "classes": len(result.label_names),
+            "citation_rows": len(raw_edges),
+        }
+        mismatches = [
+            f"{k}: expected {expected[k]}, found {actual[k]}"
+            for k in expected if expected[k] != actual[k]
+        ]
+        if mismatches:
+            raise ValueError(
+                "The files in data/cora do not look like the standard Cora "
+                "release. " + "; ".join(mismatches)
+            )
+    return result
 
 
 def load_cora_pyg(root: str = "data/pyg") -> CoraGraph:

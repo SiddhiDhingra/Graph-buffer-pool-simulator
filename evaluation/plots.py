@@ -1,40 +1,51 @@
+"""Publication-oriented plots from evaluation/summary_results.csv."""
 from __future__ import annotations
+
+import csv
+import os
+from collections import defaultdict
+
 import matplotlib.pyplot as plt
-from evaluation.experiments import run_comparison_experiment
 
-def generate_evaluation_plots():
-    print("📈 Running experiments and generating visual comparison charts...")
-    results = run_comparison_experiment()
-    
-    policies = ["fifo", "lru", "proposed"]
-    x_labels = [p.upper() for p in policies]
 
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-    colors = ["#ff9999", "#66b3ff", "#99ff99"]
+def load_summary(path: str = "results/summary_results.csv"):
+    with open(path, newline="") as f:
+        return list(csv.DictReader(f))
 
-    # 1. Hit Ratio Bar Chart
-    hr_vals = [results[p]["Hit Ratio"] for p in policies]
-    axes[0].bar(x_labels, hr_vals, color=colors)
-    axes[0].set_title("Hit Ratio Comparison (%)")
-    axes[0].set_ylabel("Hit Ratio (%)")
-    axes[0].set_ylim(0, 100)
 
-    # 2. Page Faults Bar Chart
-    pf_vals = [results[p]["Page Faults"] for p in policies]
-    axes[1].bar(x_labels, pf_vals, color=colors)
-    axes[1].set_title("Total Page Faults (Lower is Better)")
-    axes[1].set_ylabel("Fault Count")
+def generate_evaluation_plots(summary_path: str = "results/summary_results.csv",
+                              output_dir: str = "results/plots"):
+    rows = load_summary(summary_path)
+    os.makedirs(output_dir, exist_ok=True)
 
-    # 3. Simulated Latency Bar Chart
-    lat_vals = [results[p]["Simulated Latency"] for p in policies]
-    axes[2].bar(x_labels, lat_vals, color=colors)
-    axes[2].set_title("Simulated Cost / Latency")
-    axes[2].set_ylabel("Cost Units")
+    # Keep plots focused: one workload at a time makes paper figures readable.
+    for workload in sorted({r["Workload"] for r in rows}):
+        subset = [r for r in rows if r["Workload"] == workload]
+        capacities = sorted({int(r["Capacity"]) for r in subset})
+        policies = ["LRU", "Graph_Only", "LSH_Only", "Graph_LSH", "Proposed"]
 
-    plt.tight_layout()
-    plt.savefig("evaluation/performance_comparison.png")
-    print("✅ Success! Plot saved to evaluation/performance_comparison.png")
-    plt.show()
+        plt.figure(figsize=(8, 5))
+        for policy in policies:
+            points = [r for r in subset if r["Policy"] == policy]
+            points.sort(key=lambda r: int(r["Capacity"]))
+            if points:
+                plt.plot(
+                    [int(r["Capacity"]) for r in points],
+                    [float(r["Hit Ratio Mean (%)"]) for r in points],
+                    marker="o", label=policy,
+                )
+        plt.xlabel("Buffer capacity (pages)")
+        plt.ylabel("Hit ratio (%)")
+        plt.title(f"{workload}: Buffer Hit Ratio")
+        plt.grid(alpha=0.25)
+        plt.legend()
+        plt.tight_layout()
+        safe = workload.lower().replace(" ", "_").replace("+", "plus")
+        plt.savefig(os.path.join(output_dir, f"{safe}_hit_ratio.png"), dpi=300)
+        plt.close()
+
+    print(f"Saved plots to {output_dir}")
+
 
 if __name__ == "__main__":
     generate_evaluation_plots()

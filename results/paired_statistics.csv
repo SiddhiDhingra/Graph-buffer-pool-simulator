@@ -1,0 +1,13 @@
+Workload,Capacity,Baseline,Target,Seeds,Target HR Mean (%),Baseline HR Mean (%),Mean HR Improvement (percentage points),SD of Paired Difference,Cohens dz,Exact Paired p-value
+Graph,3,LRU,Proposed,10,36.392,42.626,-6.234,0.6851,-9.0988,0.001953
+Graph,5,LRU,Proposed,10,45.568,48.786,-3.218,0.5991,-5.3717,0.001953
+Graph,10,LRU,Proposed,10,55.958,56.026,-0.068,0.27,-0.2518,0.453125
+Mixed,3,LRU,Proposed,10,8.802,6.408,2.394,0.2117,11.31,0.001953
+Mixed,5,LRU,Proposed,10,15.938,11.612,4.326,0.3104,13.936,0.001953
+Mixed,10,LRU,Proposed,10,30.382,23.732,6.65,0.5386,12.3473,0.001953
+Random,3,LRU,Proposed,10,5.492,5.362,0.13,0.2838,0.458,0.183594
+Random,5,LRU,Proposed,10,9.162,9.094,0.068,0.2986,0.2277,0.515625
+Random,10,LRU,Proposed,10,18.346,18.25,0.096,0.3506,0.2738,0.40625
+Vector,3,LRU,Proposed,10,95.924,95.802,0.122,0.0319,3.8241,0.001953
+Vector,5,LRU,Proposed,10,96.55,96.256,0.294,0.112,2.6257,0.001953
+Vector,10,LRU,Proposed,10,97.608,97.262,0.346,0.1639,2.1116,0.001953

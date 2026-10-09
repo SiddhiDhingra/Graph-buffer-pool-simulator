@@ -1,12 +1,14 @@
-"""Page-access workload generators.
+"""Reproducible workload generators over the fixed Cora dataset.
 
-Each generator returns a list of *node* requests; use to_page_requests()
-to convert them to the page-access trace fed to the buffer pool.
+Generators return node requests.  The buffer pool receives page requests after
+``to_page_requests`` maps nodes to logical pages.
 """
 from __future__ import annotations
 
 import random
-from typing import List
+from typing import Dict, List
+
+import numpy as np
 
 from src.page_builder import PageTable
 
@@ -16,17 +18,17 @@ def to_page_requests(node_requests: List[int], page_table: PageTable) -> List[in
 
 
 def random_workload(graph, length: int, seed: int = 0) -> List[int]:
-    """Uniform random node accesses (no locality)."""
     rng = random.Random(seed)
     return [rng.randrange(graph.num_nodes) for _ in range(length)]
 
 
 def graph_traversal_workload(graph, length: int, restart_prob: float = 0.05,
                              seed: int = 0) -> List[int]:
-    """Random walk over graph edges, occasionally restarting elsewhere."""
+    if not 0.0 <= restart_prob <= 1.0:
+        raise ValueError("restart_prob must be in [0,1]")
     rng = random.Random(seed)
     cur = rng.randrange(graph.num_nodes)
-    out = []
+    out: List[int] = []
     for _ in range(length):
         out.append(cur)
         nbrs = sorted(graph.neighbors(cur))
@@ -38,6 +40,8 @@ def graph_traversal_workload(graph, length: int, restart_prob: float = 0.05,
 
 
 def _ball(graph, seed_node: int, radius: int) -> List[int]:
+    if radius < 0:
+        raise ValueError("radius must be non-negative")
     seen, frontier = {seed_node}, [seed_node]
     for _ in range(radius):
         nxt = []
@@ -52,8 +56,8 @@ def _ball(graph, seed_node: int, radius: int) -> List[int]:
 
 def local_graph_workload(graph, length: int, radius: int = 2,
                          dwell: int = 200, seed: int = 0) -> List[int]:
-    """Stay inside a small graph neighbourhood for `dwell` accesses, then
-    move to a new region. Strong temporal + graph locality."""
+    if dwell <= 0:
+        raise ValueError("dwell must be positive")
     rng = random.Random(seed)
     out: List[int] = []
     while len(out) < length:
@@ -67,11 +71,103 @@ def local_graph_workload(graph, length: int, radius: int = 2,
     return out
 
 
+def _page_similarity_neighbors(page_vectors: Dict[int, np.ndarray], page_id: int,
+                                top_k: int = 8) -> List[int]:
+    target = page_vectors[page_id]
+    norm = np.linalg.norm(target)
+    if norm == 0:
+        return []
+    scored = []
+    for pid, vector in page_vectors.items():
+        if pid == page_id:
+            continue
+        vnorm = np.linalg.norm(vector)
+        score = float(np.dot(target, vector) / (norm * vnorm)) if vnorm else 0.0
+        scored.append((pid, score))
+    scored.sort(key=lambda x: (-x[1], x[0]))
+    return [pid for pid, _ in scored[:top_k]]
+
+
+def semantic_page_workload(graph, page_table: PageTable,
+                           page_vectors: Dict[int, np.ndarray],
+                           length: int, top_k: int = 8,
+                           dwell: int = 30, seed: int = 0) -> List[int]:
+    """Generate node accesses that move among semantically similar pages."""
+    if length <= 0:
+        return []
+    if top_k <= 0 or dwell <= 0:
+        raise ValueError("top_k and dwell must be positive")
+
+    rng = random.Random(seed)
+    page_ids = sorted(page_table.pages)
+    neighbors = {
+        pid: _page_similarity_neighbors(page_vectors, pid, top_k)
+        for pid in page_ids
+    }
+
+    out: List[int] = []
+    current_page = rng.choice(page_ids)
+    while len(out) < length:
+        for _ in range(min(dwell, length - len(out))):
+            nodes = page_table.get_nodes_in_page(current_page)
+            out.append(rng.choice(nodes))
+        options = neighbors.get(current_page, [])
+        current_page = rng.choice(options) if options else rng.choice(page_ids)
+    return out
+
+
+def graph_semantic_workload(graph, page_table: PageTable,
+                            page_vectors: Dict[int, np.ndarray], length: int,
+                            graph_probability: float = 0.55,
+                            top_k_semantic: int = 8, seed: int = 0) -> List[int]:
+    """Combine graph-neighbor and semantic-neighbor page transitions.
+
+    This workload is deliberately independent of the eviction policy.  It is
+    used to test whether the proposed Graph+LSH method can exploit both forms
+    of locality under the same request stream as LRU/FIFO.
+    """
+    if length <= 0:
+        return []
+    if not 0.0 <= graph_probability <= 1.0:
+        raise ValueError("graph_probability must be in [0,1]")
+
+    rng = random.Random(seed)
+    page_ids = sorted(page_table.pages)
+    semantic_neighbors = {
+        pid: _page_similarity_neighbors(page_vectors, pid, top_k_semantic)
+        for pid in page_ids
+    }
+
+    page_graph = None
+    from src.graph_locality import build_page_graph
+    page_graph = build_page_graph(graph, page_table)
+
+    out: List[int] = []
+    current_page = rng.choice(page_ids)
+    for _ in range(length):
+        nodes = page_table.get_nodes_in_page(current_page)
+        out.append(rng.choice(nodes))
+
+        graph_candidates = page_graph.neighbors(current_page)
+        semantic_candidates = semantic_neighbors.get(current_page, [])
+        if rng.random() < graph_probability and graph_candidates:
+            current_page = rng.choice(sorted(graph_candidates))
+        elif semantic_candidates:
+            current_page = rng.choice(semantic_candidates)
+        elif graph_candidates:
+            current_page = rng.choice(sorted(graph_candidates))
+        else:
+            current_page = rng.choice(page_ids)
+    return out
+
+
 def mixed_workload(graph, length: int, mix=(0.2, 0.4, 0.4),
                    block: int = 100, seed: int = 0) -> List[int]:
-    """Interleave random / traversal / local blocks (mix must sum to 1)."""
+    """Legacy mixed workload: random / graph traversal / local graph blocks."""
     if abs(sum(mix) - 1.0) > 1e-9:
         raise ValueError("mix must sum to 1")
+    if block <= 0:
+        raise ValueError("block must be positive")
     rng = random.Random(seed)
     out: List[int] = []
     i = 0
@@ -86,7 +182,7 @@ def mixed_workload(graph, length: int, mix=(0.2, 0.4, 0.4),
             out += graph_traversal_workload(graph, n, seed=s)
         else:
             out += local_graph_workload(graph, n, dwell=n, seed=s)
-    return out
+    return out[:length]
 
 
 WORKLOADS = {

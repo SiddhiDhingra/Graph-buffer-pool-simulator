@@ -1,0 +1,46 @@
+{
+  "config": {
+    "data_dir": "data/cora",
+    "page_size": 50,
+    "requests": 5000,
+    "capacities": [
+      3,
+      5,
+      10
+    ],
+    "seeds": [
+      7,
+      19,
+      42,
+      73,
+      101,
+      137,
+      211,
+      307,
+      401,
+      503
+    ],
+    "lsh_tables": 5,
+    "lsh_planes": 6,
+    "lsh_probe_radius": 1
+  },
+  "dataset": "Cora",
+  "nodes": 2708,
+  "edges": 5278,
+  "pages": 55,
+  "page_size": 50,
+  "policy_names": [
+    "FIFO",
+    "LRU",
+    "Graph_Only",
+    "LSH_Only",
+    "Graph_LSH",
+    "Proposed"
+  ],
+  "workloads": [
+    "Random",
+    "Graph",
+    "Vector",
+    "Mixed"
+  ]
+}

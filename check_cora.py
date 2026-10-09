@@ -3,23 +3,32 @@ from src.page_builder import build_pages
 from src.graph_locality import build_page_graph, calculate_graph_locality, top_local_pages
 from src.workload_generator import WORKLOADS, to_page_requests
 
-g = load_cora("data/cora")
-print("nodes:", g.num_nodes)
-print("feature shape:", g.features.shape)
-print("classes:", len(g.label_names))
-print("unique edges:", len(g.edges))
 
-t = build_pages(g)
-print("pages:", t.num_pages)
-print("last page size:", len(t.page_to_nodes[t.num_pages - 1]))
-print("node 10 is on page:", t.get_page_for_node(10))
+def main():
+    g = load_cora("data/cora", strict=True)
+    print("Cora validation:")
+    print("  nodes:", g.num_nodes)
+    print("  feature shape:", g.features.shape)
+    print("  classes:", len(g.label_names))
+    print("  unique undirected edges:", len(g.edges))
 
-pg = build_page_graph(g, t)
-print("locality page 0 vs 1:", round(calculate_graph_locality(0, 1, pg), 4))
-print("top related pages to page 0:", top_local_pages(0, pg, k=3))
+    for page_size in (50,):
+        t = build_pages(g, page_size=page_size)
+        print(f"\nPage size: {page_size}")
+        print("  pages:", t.num_pages)
+        print("  last page size:", len(t.page_to_nodes[t.num_pages - 1]))
+        print("  node 10 is on page:", t.get_page_for_node(10))
 
-print("\nDistinct pages touched in 1000 requests:")
-for name, fn in WORKLOADS.items():
-    nodes = fn(g, 1000, seed=1)
-    pages = to_page_requests(nodes, t)
-    print(f"  {name:10s} {len(set(pages))} of {t.num_pages}")
+        pg = build_page_graph(g, t)
+        print("  locality page 0 vs 1:", round(calculate_graph_locality(0, 1, pg), 4))
+        print("  top related pages to page 0:", top_local_pages(0, pg, k=3))
+
+        print("\nDistinct pages touched in 1000 requests:")
+        for name, fn in WORKLOADS.items():
+            nodes = fn(g, 1000, seed=1)
+            pages = to_page_requests(nodes, t)
+            print(f"  {name:10s} {len(set(pages))} of {t.num_pages}")
+
+
+if __name__ == "__main__":
+    main()
