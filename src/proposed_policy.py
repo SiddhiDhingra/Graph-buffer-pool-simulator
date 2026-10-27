@@ -6,7 +6,7 @@ from src.graph_locality import calculate_graph_locality
 
 class GraphLSHAwareEvictionPolicy:
     def __init__(self, usefulness_calculator, page_graph,
-                 lsh_manager, access_tracker):
+                lsh_manager, access_tracker, prepare_static=True):
         self.calculator = usefulness_calculator
         self.page_graph = page_graph
         self.lsh_manager = lsh_manager
@@ -25,7 +25,7 @@ class GraphLSHAwareEvictionPolicy:
                 page_ids.update(values.keys())
         if lsh_manager is not None:
             page_ids.update(lsh_manager.page_vectors.keys())
-        if page_ids:
+        if page_ids and prepare_static:
             self.calculator.prepare(page_ids, page_graph, lsh_manager)
 
     def record_access(self, page_id: int) -> None:
