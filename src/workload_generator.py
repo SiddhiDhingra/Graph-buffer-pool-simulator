@@ -191,3 +191,72 @@ WORKLOADS = {
     "local": local_graph_workload,
     "mixed": mixed_workload,
 }
+
+def rag_workload(
+    graph,
+    page_table,
+    page_vectors,
+    length: int,
+    top_k: int = 8,
+    graph_expansion_probability: float = 0.35,
+    seed: int = 0,
+):
+    """Simulate RAG requests: retrieve semantically related pages,
+    then sometimes expand through graph neighbors.
+
+    Returns node IDs, compatible with to_page_requests().
+    This simulates retrieval behavior; it does not call an LLM.
+    """
+    import random
+
+    if length <= 0:
+        return []
+    if top_k <= 0:
+        raise ValueError("top_k must be positive")
+    if not 0.0 <= graph_expansion_probability <= 1.0:
+        raise ValueError(
+            "graph_expansion_probability must be between 0 and 1"
+        )
+
+    rng = random.Random(seed)
+    page_ids = sorted(page_table.pages)
+    if not page_ids:
+        return []
+
+    requests = []
+    query_page = rng.choice(page_ids)
+
+    while len(requests) < length:
+        retrieved_pages = _page_similarity_neighbors(
+            page_vectors, query_page, top_k=top_k
+        )
+
+        # Always include the query page; remove duplicate page IDs.
+        retrieved_pages = list(
+            dict.fromkeys([query_page, *retrieved_pages])
+        )
+
+        for page_id in retrieved_pages:
+            nodes = page_table.get_nodes_in_page(page_id)
+
+            for node_id in nodes:
+                requests.append(node_id)
+                if len(requests) >= length:
+                    break
+
+                # Approximate graph-context expansion.
+                if rng.random() < graph_expansion_probability:
+                    neighbors = list(graph.neighbors(node_id))
+                    if neighbors:
+                        requests.append(rng.choice(neighbors))
+                        if len(requests) >= length:
+                            break
+
+            if len(requests) >= length:
+                break
+
+        # Next query starts from a semantically retrieved page.
+        query_page = rng.choice(retrieved_pages)
+
+    return requests[:length]
+

@@ -42,6 +42,7 @@ from src.workload_generator import (
     graph_traversal_workload,
     mixed_workload,
     random_workload,
+    rag_workload,
     semantic_page_workload,
     to_page_requests,
 )
@@ -310,12 +311,25 @@ def generate_workloads(
         ),
         page_table,
     )
+    rag_trace = to_page_requests(
+        rag_workload(
+            graph,
+            page_table,
+            page_vectors,
+            length,
+            top_k=8,
+            graph_expansion_probability=0.35,
+            seed=seed,
+        ),
+        page_table,
+    )
 
     return {
         "Random": random_trace,
         "Graph": graph_trace,
         "Vector": vector_trace,
         "Mixed": mixed_trace,
+        "RAG": rag_trace,
     }
 
 
@@ -424,6 +438,7 @@ def run_research_suite(
         "Graph",
         "Vector",
         "Mixed",
+        "RAG",
     ]:
 
         print("\n" + "=" * 72)
