@@ -1,4 +1,4 @@
-"""Reproducible workload generators over the fixed Cora dataset.
+"""Reproducible workload generators over the THGB DBLP-TA dataset.
 
 Generators return node requests.  The buffer pool receives page requests after
 ``to_page_requests`` maps nodes to logical pages.
