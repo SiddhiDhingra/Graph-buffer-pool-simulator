@@ -42,7 +42,7 @@ class LSHManager:
             if vec.shape[0] != self.dimension:
                 raise ValueError(f"Page {pid} has an incorrect vector dimension")
 
-        # Normalize once.  Cora's word vectors are non-negative, so cosine is
+        # Normalize once.  THGB node embeddings are non-negative, so cosine is
         # naturally in [0,1].  We do not shift it to [0.5,1].
         self.normalized_vectors: Dict[int, np.ndarray] = {}
         for pid, vec in self.page_vectors.items():

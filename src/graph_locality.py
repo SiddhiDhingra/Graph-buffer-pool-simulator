@@ -1,4 +1,4 @@
-"""Page-level structural locality derived from the Cora citation graph."""
+"""Page-level structural locality derived from the THGB DBLP-TA graph."""
 from __future__ import annotations
 
 from collections import defaultdict
@@ -8,7 +8,7 @@ from src.page_builder import PageTable
 
 
 class PageGraph:
-    """Weighted page graph induced by node-level Cora edges."""
+    """Weighted page graph induced by node-level THGB edges."""
 
     def __init__(self):
         self.weights: Dict[int, Dict[int, int]] = defaultdict(lambda: defaultdict(int))

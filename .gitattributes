@@ -1,0 +1,2 @@
+data/thgb/**/node.dat filter=lfs diff=lfs merge=lfs -text
+data/thgb/** filter=lfs diff=lfs merge=lfs -text

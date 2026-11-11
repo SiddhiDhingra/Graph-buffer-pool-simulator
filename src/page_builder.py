@@ -49,7 +49,7 @@ _default_table: Optional[PageTable] = None
 
 
 def build_pages(graph_or_num_nodes, page_size: int = PAGE_SIZE) -> PageTable:
-    """Build pages from a CoraGraph (or a node count). Also sets the module
+    """Build pages from a THGB graph-like object (or a node count). Also sets the module
     default table used by get_page_for_node()."""
     global _default_table
     n = graph_or_num_nodes if isinstance(graph_or_num_nodes, int) \
