@@ -72,7 +72,7 @@ if st.button("Build THGB indexes", type="secondary"):
         st.error(f"THGB initialization failed: {exc}")
         st.exception(exc)
 
-if st.button("▶ Run LRU vs Proposed", type="primary"):
+if st.button("▶ Run FIFO vs LRU vs Proposed", type="primary"):
     try:
         n_nodes, storage = load_thgb_page_storage(data_dir, int(page_size))
         vectors, page_graph, lsh, calc = load_thgb_indexes(data_dir, int(page_size), int(lsh_tables), int(lsh_planes), int(probe_radius))
@@ -80,10 +80,22 @@ if st.button("▶ Run LRU vs Proposed", type="primary"):
         trace = make_workload(workload_name, int(requests), int(seed), page_ids, page_graph, lsh)
         shared = calc
         rows = []
-        for policy_name in ("LRU", "Proposed"):
-            policy = make_policy(policy_name, page_graph, lsh, shared_calculator=shared if policy_name == "Proposed" else None)
+        for policy_name in ("FIFO", "LRU", "Proposed"):
+            policy = make_policy(
+                policy_name,
+                page_graph,
+                lsh,
+                shared_calculator=shared if policy_name == "Proposed" else None
+            )
+
             metrics = run_trace(trace, storage, int(capacity), policy)
-            rows.append({"Dataset": "THGB DBLP-TA", "Workload": workload_name, "Policy": policy_name, **metrics})
+
+            rows.append({
+                "Dataset": "THGB DBLP-TA",
+                "Workload": workload_name,
+                "Policy": policy_name,
+                **metrics
+            })
         frame = pd.DataFrame(rows)
         st.session_state["thgb_results"] = frame
         st.session_state["thgb_summary"] = {"Nodes": n_nodes, "Edges": sum(1 for _ in (Path(data_dir)/"link.dat").open("r", encoding="utf-8")), "Pages": len(storage), "Vector dimensions": int(vectors.shape[1])}
@@ -103,4 +115,3 @@ if "thgb_results" in st.session_state:
     st.download_button("Download results CSV", st.session_state["thgb_results"].to_csv(index=False), "thgb_streamlit_results.csv", "text/csv")
 
 st.divider()
-st.caption("Research note: random, graph-transition, and LSH-neighbor traces are synthetic page-request workloads derived from THGB structures. They are not an end-to-end RAG evaluation. Compare policies on identical traces and report all workloads, seeds, and capacities.")
