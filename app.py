@@ -57,7 +57,7 @@ with st.sidebar:
     capacity = st.number_input("Buffer capacity (pages)", min_value=1, max_value=10000, value=50, step=1)
     requests = st.number_input("Page requests", min_value=10, max_value=1000000, value=1000, step=100)
     seed = st.number_input("Random seed", min_value=0, max_value=2**31-1, value=42)
-    workload_name = st.selectbox("Workload", ["random", "graph", "semantic"])
+    workload_name = st.selectbox("Workload", ["random", "mixed" , "graph", "semantic"])
     lsh_tables = st.number_input("LSH tables", min_value=1, max_value=32, value=5)
     lsh_planes = st.number_input("LSH hyperplanes/table", min_value=1, max_value=16, value=6)
     probe_radius = st.selectbox("LSH probe radius", [0, 1, 2], index=1)

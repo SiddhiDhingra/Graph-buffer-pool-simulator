@@ -47,6 +47,7 @@ def count_nodes(node_path: Path) -> int:
         return sum(1 for _ in stream)
 
 
+
 def make_workload(
     kind: str,
     length: int,
@@ -57,6 +58,7 @@ def make_workload(
 ) -> list[int]:
     """Generate deterministic page-ID requests independently of policy."""
     rng = random.Random(seed)
+
     if not page_ids or length < 1:
         return []
 
@@ -67,19 +69,35 @@ def make_workload(
     for _ in range(length):
         trace.append(current)
 
-        if kind == "random":
+        # Mixed workload combines all three request patterns.
+        if kind == "mixed":
+            request_type = rng.choice(
+                ["random", "graph", "semantic"]
+            )
+        else:
+            request_type = kind
+
+        if request_type == "random":
             current = rng.choice(page_ids)
 
-        elif kind == "graph":
+        elif request_type == "graph":
             neighbors = sorted(page_graph.neighbors(current))
-            current = rng.choice(neighbors) if neighbors else rng.choice(page_ids)
+            current = (
+                rng.choice(neighbors)
+                if neighbors
+                else rng.choice(page_ids)
+            )
 
-        elif kind == "semantic":
+        elif request_type == "semantic":
             candidates = [
                 p for p in lsh.get_candidates(current)
                 if p != current and p in page_id_set
             ]
-            current = rng.choice(candidates) if candidates else rng.choice(page_ids)
+            current = (
+                rng.choice(candidates)
+                if candidates
+                else rng.choice(page_ids)
+            )
 
         else:
             raise ValueError(f"Unknown workload: {kind}")
@@ -232,7 +250,7 @@ def main():
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     rows = []
-    for workload_name in ("random", "graph", "semantic"):
+    for workload_name in ("random", "mixed", "graph", "semantic"):
         for seed in args.seeds:
             print(
                 f"Generating trace: workload={workload_name}, seed={seed}",
@@ -280,7 +298,7 @@ def main():
         "logical_pages": len(page_ids),
         "page_size": args.page_size,
         "vector_shape": list(vector_matrix.shape),
-        "workloads": ["random", "graph", "semantic"],
+        "workloads": ["random", "mixed", "graph", "semantic"],
         "policies": ["FIFO", "LRU", "Proposed"],
         "capacities": args.capacities,
         "seeds": args.seeds,
