@@ -1,0 +1,40 @@
+{
+  "dataset": "THGB DBLP-TA",
+  "data_dir": "data\\thgb\\DBLP-TA",
+  "nodes": 233620,
+  "logical_pages": 4673,
+  "page_size": 50,
+  "vector_shape": [
+    4673,
+    768
+  ],
+  "workloads": [
+    "random",
+    "mixed",
+    "graph",
+    "semantic"
+  ],
+  "policies": [
+    "FIFO",
+    "LRU",
+    "Proposed"
+  ],
+  "capacities": [
+    10,
+    50,
+    100
+  ],
+  "seeds": [
+    7,
+    42,
+    101
+  ],
+  "requests_per_trace": 1000,
+  "lsh_tables": 5,
+  "lsh_planes": 6,
+  "probe_radius": 1,
+  "graph_assumption": "Edge types are collapsed; page connections are symmetrized.",
+  "layout_assumption": "Consecutive node IDs are grouped into logical pages; this does not establish the physical layout of the original database.",
+  "semantic_workload_assumption": "Transitions use LSH candidate pages; this is a synthetic workload.",
+  "results_csv": "results\\thgb\\thgb_results.csv"
+}
