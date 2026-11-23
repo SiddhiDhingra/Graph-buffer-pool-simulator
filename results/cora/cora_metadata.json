@@ -1,0 +1,38 @@
+{
+  "dataset": "Cora",
+  "nodes": 2708,
+  "directed_citation_rows": 5429,
+  "unique_undirected_edges": 5278,
+  "feature_dimensions": 1433,
+  "logical_pages": 55,
+  "page_size": 50,
+  "workloads": [
+    "random",
+    "mixed",
+    "graph",
+    "semantic"
+  ],
+  "policies": [
+    "FIFO",
+    "LRU",
+    "Proposed"
+  ],
+  "capacities": [
+    3,
+    5,
+    10
+  ],
+  "seeds": [
+    7,
+    42,
+    101
+  ],
+  "requests_per_trace": 1000,
+  "lsh_tables": 5,
+  "lsh_planes": 6,
+  "probe_radius": 1,
+  "edge_assumption": "Citation edges are deduplicated and treated as undirected.",
+  "layout_assumption": "Consecutive internal node IDs are grouped into logical pages.",
+  "label_assumption": "Class labels are metadata and are excluded from feature vectors.",
+  "results_csv": "results\\cora\\cora_results.csv"
+}
